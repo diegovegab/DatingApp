@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DatingApp.API.Helpers;
 using DatingApp.API.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,14 +39,39 @@ namespace DatingApp.API.Data
 
         public async Task<User> GetUser(int id)
         {
-            var user = await _context.Users.Include(f => f.Photos).FirstOrDefaultAsync(u => u.Id == id);
+            var user = await _context.Users.Include(f => f.Photos).FirstOrDefaultAsync(u => u.Id == id);          
+
             return user;
         }
 
-        public async Task<IEnumerable<User>> GetUsers()
+        public async Task<PagedList<User>> GetUsers(UserParams userParams)
         {
-            var users = await _context.Users.Include(f => f.Photos).ToListAsync();
-            return users;
+            var users = _context.Users.Include(f => f.Photos).OrderByDescending(u => u.LastActivate).AsQueryable();
+
+            users = users.Where(u => u.Id != userParams.UserId);
+            
+            users = users.Where(u => u.Gender == userParams.Gender);
+
+            if (userParams.MinAge != 18 || userParams.MaxAge != 99) {
+                var minDob = DateTime.Today.AddYears(-userParams.MaxAge -1);
+                var maxDob = DateTime.Today.AddYears(-userParams.MinAge);
+
+                users = users.Where(u => u.DateofBirth >= minDob && u.DateofBirth <= maxDob);
+            }
+
+            if (!string.IsNullOrWhiteSpace(userParams.OrderBy)) {
+                switch(userParams.OrderBy) {
+                    case "created":
+                        users = users.OrderByDescending(u => u.Created);
+                        break;
+                    default:
+                        users = users.OrderByDescending(u => u.LastActivate);
+                        break;    
+                }
+            }
+
+
+            return await PagedList<User>.CreatedAsync(users, userParams.PageNumber, userParams.PageSize);
         }
 
         public async Task<bool> SaveAll()
